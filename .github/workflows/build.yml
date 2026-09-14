@@ -10,8 +10,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout user files
         uses: actions/checkout@v4
+        with:
+          path: repo
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -24,20 +26,37 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Create basic Flutter skeleton
+      - name: Create Complete Flutter Skeleton
         run: |
-          flutter create --org com.example --project-name wemet temp_dir
-          cp -r temp_dir/android .
-          rm -rf temp_dir
+          # 1. Create clean project structure
+          flutter create --org com.example --project-name wemet wemet_app
+          cd wemet_app
 
-      - name: Install dependencies
-        run: flutter pub get
+          # 2. Copy user's code and config files over
+          cp -f ../repo/pubspec.yaml .
+          cp -rf ../repo/lib/* ./lib/
+          
+          # 3. Copy custom Android manifest
+          if [ -f ../repo/android/app/src/main/AndroidManifest.xml ]; then
+            cp -f ../repo/android/app/src/main/AndroidManifest.xml ./android/app/src/main/AndroidManifest.xml
+          fi
 
-      - name: Build APK
-        run: flutter build apk --release
+          # 4. Ensure min/compile SDK versions meet package requirements
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle || true
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle || true
 
-      - name: Upload APK
+          # 5. Fetch dependencies
+          flutter pub get
+
+          # 6. Build the APK
+          flutter build apk --release
+
+          # 7. Move output to root for artifact upload
+          mkdir -p ../output
+          cp build/app/outputs/flutter-apk/app-release.apk ../output/
+
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: WeMet-Release-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: output/app-release.apk
