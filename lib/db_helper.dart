@@ -101,6 +101,54 @@ class DBHelper {
     return await db.insert('contacts', contact.toMap());
   }
 
+  Future<int> updateContact(ContactModel contact) async {
+    final db = await database;
+    return await db.update(
+      'contacts',
+      contact.toMap(),
+      where: 'id = ?',
+      whereArgs: [contact.id],
+    );
+  }
+
+  Future<int> deleteContact(int id) async {
+    final db = await database;
+    return await db.delete('contacts', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> mergeContacts(ContactModel primary, ContactModel duplicate) async {
+    final db = await database;
+
+    final mergedCompany = (primary.company?.isNotEmpty ?? false) ? primary.company : duplicate.company;
+    final mergedPhone = (primary.phone?.isNotEmpty ?? false) ? primary.phone : duplicate.phone;
+    final mergedEmail = (primary.email?.isNotEmpty ?? false) ? primary.email : duplicate.email;
+    final mergedPhoto = (primary.photoPath?.isNotEmpty ?? false) ? primary.photoPath : duplicate.photoPath;
+    final mergedResidence = (primary.residence?.isNotEmpty ?? false) ? primary.residence : duplicate.residence;
+    
+    final mergedHobbies = [primary.hobbies, duplicate.hobbies].where((e) => e != null && e.isNotEmpty).join(' | ');
+    final mergedFamily = [primary.familyNotes, duplicate.familyNotes].where((e) => e != null && e.isNotEmpty).join(' | ');
+    final mergedDiscussion = [primary.lastDiscussion, duplicate.lastDiscussion].where((e) => e != null && e.isNotEmpty).join('\n---\n');
+
+    final updated = ContactModel(
+      id: primary.id,
+      name: primary.name,
+      phone: mergedPhone,
+      email: mergedEmail,
+      photoPath: mergedPhoto,
+      company: mergedCompany,
+      residence: mergedResidence,
+      hobbies: mergedHobbies,
+      familyNotes: mergedFamily,
+      lastMetDate: primary.lastMetDate ?? duplicate.lastMetDate,
+      lastDiscussion: mergedDiscussion,
+    );
+
+    await db.transaction((txn) async {
+      await txn.update('contacts', updated.toMap(), where: 'id = ?', whereArgs: [primary.id]);
+      await txn.delete('contacts', where: 'id = ?', whereArgs: [duplicate.id]);
+    });
+  }
+
   Future<List<ContactModel>> searchContacts(String query) async {
     final db = await database;
     final cleanQuery = '%$query%';
